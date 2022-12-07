@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
+import { number } from 'joi';
 import mongoose from 'mongoose';
 import Cost from '../models/Cost';
 
@@ -28,40 +29,48 @@ const readCost = (req: Request, res: Response, next: NextFunction) => {
         .catch((error) => res.status(500).json({ error }));
 };
 
-// const readCost1 = (req: Request, res: Response, next: NextFunction) => {
-//     const costMonth = req.params.costMonth;
-//     const costYear = req.params.costYear;
+const readCostDetail = (req: Request, res: Response, next: NextFunction) => {
+    let costYear = req.params.costYear;
+    let costMonth = req.params.costMonth;
 
-//     Cost.find({
-//         $and: [{ $expr: { $eq: [{ $month: '$added' }, costMonth] } }, { $expr: { $eq: [{ $year: '$added' }, costYear] } }]
-//     }).count();
+    let islastDay = function (costYear: any, costMonth: any) {
+        return new Date(costYear, costMonth, 0).getDate();
+    };
 
-//     const month = costMonth;
-//     const year = costYear;
-//     const bruttoSum = ;
-//     const nettoSum = ;
-//     const bruttoAverage = ;
-//     const costsAmount = Cost.find({
-//         $and: [{ $expr: { $eq: [{ $month: '$added' }, costMonth] } }, { $expr: { $eq: [{ $year: '$added' }, costYear] } }]
-//     }).count();
+    const lastDay = islastDay(costYear, costMonth);
 
-//     const monthCost = new MonthCost({
-//         _id: new mongoose.Types.ObjectId(),
-//         month,
-//         year,
-//         bruttoSum,
-//         nettoSum,
-//         bruttoAverage,
-//         costsAmount
-//     });
-
-//     return Cost.find({
-//         $and: [{ $expr: { $eq: [{ $month: '$added' }, costMonth] } }, { $expr: { $eq: [{ $year: '$added' }, costYear] } }]
-//     })
-//         .sort({ brutto: -1 })
-//         .then((cost) => (cost ? res.status(200).json({ cost }) : res.status(404).json({ message: 'Not found' })))
-//         .catch((error) => res.status(500).json({ error }));
-// };
+    return Cost.aggregate([
+        {
+            $match: {
+                $and: [
+                    {
+                        $expr: {
+                            $gte: ['$added', { $dateFromString: { dateString: costYear + '-' + costMonth + '-' + '01' } }]
+                        }
+                    },
+                    {
+                        $expr: {
+                            $lt: ['$added', { $dateFromString: { dateString: costYear + '-' + costMonth + '-' + lastDay } }]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $group: {
+                _id: { year: { $year: '$added' }, month: { $month: '$added' } },
+                bruttoSum: { $sum: '$brutto' },
+                nettoSum: { $sum: '$netto' },
+                bruttoAvg: { $avg: '$brutto' },
+                costsAmount: {
+                    $sum: 1
+                }
+            }
+        }
+    ])
+        .then((cost) => (cost ? res.status(200).json({ cost }) : res.status(404).json({ message: 'Not found' })))
+        .catch((error) => res.status(500).json({ error }));
+};
 
 const readAll = (req: Request, res: Response, next: NextFunction) => {
     return Cost.find()
@@ -96,4 +105,4 @@ const deleteCost = (req: Request, res: Response, next: NextFunction) => {
         .catch((error) => res.status(500).json({ error }));
 };
 
-export default { createCost, readCost, readAll, updateCost, deleteCost };
+export default { createCost, readCost, readCostDetail, readAll, updateCost, deleteCost };
